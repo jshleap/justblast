@@ -46,12 +46,12 @@ If you do not have admin privileges, you can add the `--user` option.
 # Usage
 You can explore the options by typing:
 ```
-justblast.py -h
+justblast -h
 ```
 and you will get
 
 ```
-usage: justblast.py [-h] [-e EVALUE] [-p PERCENT_ID] [-m MAX_TARGET_SEQS]
+usage: justblast [-h] [-e EVALUE] [-p PERCENT_ID] [-m MAX_TARGET_SEQS]
             [-q QUERY_COVERAGE] [-c CPUS] [-i] [-o OUT_FILENAME] [-f OUTFMT]
             query db
 
