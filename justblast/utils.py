@@ -17,13 +17,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 E-mail: jshleap@squalus.org
 """
-
+import os
 import gzip
 import shelve
 from itertools import zip_longest
 from subprocess import run, PIPE, CalledProcessError
 from typing import Optional, Iterator, Tuple, Dict
-
+from joblib import Parallel, delayed
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
@@ -118,24 +118,29 @@ class FastX(object):
                     seq = '@%s\n%s\n+\n%s' % (name, f[name][0], f[name][0])
                 yield seq
 
-    def parse_fastq(self, file_name: str) -> None:
-        fn = file_name[file_name.rfind('.')]
-        self.shelve_name = '%s.shelf' % fn
-        with shelve.open(self.shelve_name) as shelf, self.open(
-                file_name) as handle:
+    def parse_fastq(self, file_name:str) -> None:
+        self.shelve_name = '%s.shelf' % self.outprefix
+        with self.open(file_name) as handle, shelve.open(
+                self.shelve_name) as shelf:
             args = [iter(handle)] * 4
-            for chunk in tqdm(zip_longest(*args, fillvalue=None),
-                              desc="Parsing %s" % file_name):
-                name = chunk[0].decode('utf-8').strip() if isinstance(
-                    chunk[0], bytes) else chunk[0].strip()[1:]
-                seq = chunk[1].decode('utf-8').strip() if isinstance(
-                    chunk[1], bytes) else chunk[0].strip()
-                seq = seq if self.trimm is None else seq[:self.trimm]
-                qual = chunk[3].decode('utf-8').strip() if isinstance(
-                    chunk[3], bytes) else chunk[0].strip()
-                shelf[name] = (seq, qual)
-                self.ids = np.append(self.ids, name)
-                self.lengths = np.append(self.lengths, len(seq))
+            if not os.path.isfile('%s.shelve' % self.outprefix):
+                aln = Parallel(n_jobs=self.cpus, prefer="threads")(
+                    delayed(self.run_parser_fastq)(chunk, self.trimm, shelf)
+                    for chunk in tqdm(zip_longest(*args, fillvalue=None),
+                                      desc="Parsing %s" % file_name))
+                self.ids, self.lengths = zip(*aln)
+
+    @staticmethod
+    def run_parser_fastq(chunk, trimm, shelf):
+        name = chunk[0].decode('utf-8').strip() if isinstance(
+            chunk[0], bytes) else chunk[0].strip()[1:]
+        seq = chunk[1].decode('utf-8').strip() if isinstance(
+            chunk[1], bytes) else chunk[0].strip()
+        seq = seq if trimm is None else seq[:trimm]
+        qual = chunk[3].decode('utf-8').strip() if isinstance(
+            chunk[3], bytes) else chunk[0].strip()
+        shelf[name] = (seq, qual)
+        return name, len(seq)
 
     def parse_fasta(self, file_name: str) -> None:
         name, seq = None, ''
