@@ -17,22 +17,26 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 E-mail: jshleap@squalus.org
 """
-import os
 import gzip
+import os
 import shelve
 from itertools import zip_longest
 from subprocess import run, PIPE, CalledProcessError
-from typing import Optional, Iterator, Tuple, Dict
-from joblib import Parallel, delayed
+from typing import Optional, Iterator, Tuple
+
 import matplotlib.pyplot as plt
 import numpy as np
+from joblib import Parallel, delayed
+from psutil import virtual_memory
 from tqdm import tqdm
 
 plt.style.use('ggplot')
 
 
-def stdin_run(args: list, inpt: Optional[str], env: Dict[str, str] = {},
+def stdin_run(args: list, inpt: Optional[str], env=None,
               **kwargs) -> Tuple[bytes, str]:
+    if env is None:
+        env = {}
     if inpt is None:
         exe = run(args, stderr=PIPE, stdout=PIPE, env=env, **kwargs)
     else:
@@ -54,9 +58,11 @@ class FastX(object):
     ids = np.array([], dtype=object)
     lengths = np.array([], dtype=int)
     shelve_name = None
+    cpus = -1
+    bigfile = False
 
     def __init__(self, filename: str, trimm: Optional[int] = None,
-                 outprefix: str = None) -> None:
+                 outprefix: str = None, cpus: int = -1) -> None:
         """
         FastX constructor
         :param filename: Name of sequence file
@@ -118,10 +124,17 @@ class FastX(object):
                     seq = '@%s\n%s\n+\n%s' % (name, f[name][0], f[name][0])
                 yield seq
 
-    def parse_fastq(self, file_name:str) -> None:
+    def parse_fastq(self, file_name: str) -> None:
         self.shelve_name = '%s.shelf' % self.outprefix
-        with self.open(file_name) as handle, shelve.open(
-                self.shelve_name) as shelf:
+        with self.open(file_name) as handle:
+            file_size = os.fstat(handle.fileno()).st_size / (
+                    1024 * 1024 * 1024)
+            avail_mem = virtual_memory().available / (1024 * 1024 * 1024)
+            if file_size <= avail_mem:
+                shelf = {}
+            else:
+                shelf = shelve.open(self.shelve_name)
+                self.bigfile = True
             args = [iter(handle)] * 4
             if not os.path.isfile('%s.shelve' % self.outprefix):
                 aln = Parallel(n_jobs=self.cpus, prefer="threads")(
@@ -129,6 +142,8 @@ class FastX(object):
                     for chunk in tqdm(zip_longest(*args, fillvalue=None),
                                       desc="Parsing %s" % file_name))
                 self.ids, self.lengths = zip(*aln)
+            if self.bigfile:
+                shelf.close()
 
     @staticmethod
     def run_parser_fastq(chunk, trimm, shelf):
