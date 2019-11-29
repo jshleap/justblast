@@ -22,8 +22,9 @@ import os
 import shelve
 from itertools import zip_longest
 from subprocess import run, PIPE, CalledProcessError
-from typing import Optional, Iterator, Tuple
+from typing import Optional, Iterator, Tuple, List
 
+import dill
 import matplotlib.pyplot as plt
 import numpy as np
 from joblib import Parallel, delayed
@@ -55,14 +56,16 @@ class FastX(object):
     Class to handle a fast* files
     """
     h5 = None
-    ids = np.array([], dtype=object)
-    lengths = np.array([], dtype=int)
-    shelve_name = None
-    cpus = -1
-    bigfile = False
+    ids: np.ndarray = np.array([], dtype=object)
+    lengths: np.ndarray = np.array([], dtype=int)
+    shelve_name: Optional[str] = None
+    bigfile: bool = False
+    uniques: List[str] = []
+    n_duplicates: int = 0
 
     def __init__(self, filename: str, trimm: Optional[int] = None,
-                 outprefix: str = None, cpus: int = -1) -> None:
+                 outprefix: str = None, unique: bool = False,
+                 cpus: int = -1) -> None:
         """
         FastX constructor
         :param filename: Name of sequence file
@@ -70,9 +73,11 @@ class FastX(object):
         :param outprefix: Prefix or output
         """
         self.filename = filename
+        self.unique = unique
         self.trimm = trimm
         self.tipo = filename
         self.outprefix = outprefix
+        self.cpus = cpus
         self.populate()
 
     def __str__(self):
@@ -116,13 +121,23 @@ class FastX(object):
             self.parse_fastq(self.filename)
 
     def yield_seq(self, as_fasta: bool = True) -> Iterator[str]:
-        with shelve.open(self.shelve_name) as f:
-            for name in self.ids:
-                if as_fasta:
-                    seq = '>%s\n%s' % (name, f[name][0])
-                else:
-                    seq = '@%s\n%s\n+\n%s' % (name, f[name][0], f[name][0])
-                yield seq
+        if self.bigfile:
+            f = shelve.open(self.shelve_name)
+        else:
+            f = self.shelve_name
+        for name in self.ids:
+            seq = f[name][0]
+            if self.unique and seq in self.uniques:
+                self.n_duplicates += 1
+                continue
+            if as_fasta:
+                seq = '>%s\n%s' % (name, seq)
+            else:
+                seq = '@%s\n%s\n+\n%s' % (name, seq, seq)
+            self.uniques.append(seq)
+            yield seq
+        if self.bigfile:
+            f.close()
 
     def parse_fastq(self, file_name: str) -> None:
         self.shelve_name = '%s.shelf' % self.outprefix
@@ -137,25 +152,41 @@ class FastX(object):
                 self.bigfile = True
             args = [iter(handle)] * 4
             if not os.path.isfile('%s.shelve' % self.outprefix):
-                aln = Parallel(n_jobs=self.cpus, prefer="threads")(
-                    delayed(self.run_parser_fastq)(chunk, self.trimm, shelf)
+                aln = Parallel(n_jobs=self.cpus)(  # , prefer="threads")(
+                    delayed(self.run_parser_fastq)(
+                        chunk, self.trimm, shelf, self.bigfile)
                     for chunk in tqdm(zip_longest(*args, fillvalue=None),
                                       desc="Parsing %s" % file_name))
-                self.ids, self.lengths = zip(*aln)
+                if self.bigfile:
+                    self.ids, self.lengths = zip(*aln)
+                else:
+                    self.ids, self.lengths, tuples = zip(*aln)
+                    shelf = dict(tuples)
+            elif not self.bigfile:
+                with open(self.shelve_name, 'rb') as d:
+                    shelf = dill.load(d)
+
             if self.bigfile:
                 shelf.close()
+            else:
+                with open(self.shelve_name, 'wb') as d:
+                    dill.dump(shelf, d)
+                self.shelve_name = shelf
 
     @staticmethod
-    def run_parser_fastq(chunk, trimm, shelf):
+    def run_parser_fastq(chunk, trimm, shelf, big):
         name = chunk[0].decode('utf-8').strip() if isinstance(
             chunk[0], bytes) else chunk[0].strip()[1:]
         seq = chunk[1].decode('utf-8').strip() if isinstance(
-            chunk[1], bytes) else chunk[0].strip()
+            chunk[1], bytes) else chunk[1].strip()
         seq = seq if trimm is None else seq[:trimm]
         qual = chunk[3].decode('utf-8').strip() if isinstance(
-            chunk[3], bytes) else chunk[0].strip()
-        shelf[name] = (seq, qual)
-        return name, len(seq)
+            chunk[3], bytes) else chunk[3].strip()
+        if big:
+            shelf[name] = (seq, qual)
+            return name, len(seq)
+        else:
+            return name, len(seq), (name, (seq, qual))
 
     def parse_fasta(self, file_name: str) -> None:
         name, seq = None, ''
