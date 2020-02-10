@@ -12,3 +12,5 @@ python-dateutil==2.8.1
 pytz==2019.3
 six==1.13.0
 tqdm==4.38.0
+pyfaidx==0.5.8
+termcolor==1.1.0

@@ -1,9 +1,14 @@
 #!/usr/bin/env python
 
 from justblast.justblast_main import *
+from justblast.__version__ import version
+from termcolor import colored
+
+print('\njustblast version:', colored(version, None, attrs=["bold", "blink"]))
+print(colored('Copyright 2019', 'red', attrs=["bold"]), 'Jose Sergio Hleap\n')
 
 parser = argparse.ArgumentParser(
-    prog='PROG', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    prog='justblast', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('query', help='Fasta file with query sequences')
 parser.add_argument('db', help='path to blast database', default='nt')
 parser.add_argument('-e', '--evalue', default=10, type=float,
