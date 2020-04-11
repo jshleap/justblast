@@ -19,6 +19,7 @@ E-mail: jshleap@squalus.org
 """
 import gzip
 import os
+import sys
 import shelve
 from itertools import zip_longest
 from subprocess import run, PIPE, CalledProcessError
@@ -161,7 +162,8 @@ class FastX(object):
         if self.bigfile:
             self.store.close()
         if self.unique:
-            print(self.n_duplicates, 'duplicates found and removed')
+            print(self.n_duplicates, 'duplicates found and removed',
+                  file=sys.stderr)
 
     def parse_fastq(self, file_name: str) -> None:
         args = [iter(self.handle)] * 4
