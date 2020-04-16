@@ -22,7 +22,7 @@ parser.add_argument('-q', '--query_coverage', default=None, type=float,
 parser.add_argument('-c', '--cpus', default=-1, type=int,
                     help='Number of cpus to use')
 parser.add_argument('-i', '--identify', default=False, action='store_true',
-                    help='Whether to use basta to assign taxopnomy to the '
+                    help='Whether to use basta to assign taxonomy to the '
                          'hits based on LCA. This is a rough estimate and '
                          'should be revised carefully')
 parser.add_argument('-o', '--out_filename', default='hit.hits', type=str,

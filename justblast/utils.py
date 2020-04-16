@@ -31,14 +31,14 @@ import numpy as np
 from joblib import Parallel, delayed
 from psutil import virtual_memory
 from tqdm import tqdm
-from io import StringIO
+from io import StringIO, UnsupportedOperation
 from pyfaidx import Fasta
 
 plt.style.use('ggplot')
 
 
 def stdin_run(args: list, inpt: Optional[str], env=None,
-              **kwargs) -> Tuple[bytes, str]:
+              **kwargs) -> Optional[str, Tuple[bytes, str]]:
     if env is None:
         env = {}
     if inpt is None:
@@ -100,15 +100,15 @@ class FastX(object):
     def tipo(self, filename: str) -> None:
         if filename.startswith('>') or filename.startswith('@'):
             self.open = StringIO
-            line = filename.split('\n')[0]
+            line = filename.strip().split('\n')[0]
         else:
             try:
                 with gzip.open(filename, 'rb') as fi:
-                    line = fi.readline().decode('utf-8')
+                    line = fi.readline().strip().decode('utf-8')
                     self.open = gzip.open
             except OSError:
                 with open(filename) as fi:
-                    line = fi.readline()
+                    line = fi.readline().strip()
                     self.open = open
         if line.startswith('>'):
             self._tipo = 'a'
@@ -116,9 +116,14 @@ class FastX(object):
             self._tipo = 'q'
         else:
             raise Exception("Not an acceptable file format")
-        conversion =(1024 * 1024 * 1024)
+        conversion = 1073741824  # 1024 ** 3
         self.handle = self.open(filename)
-        file_size = os.fstat(self.handle.fileno()).st_size / conversion
+        try:
+            file_size = os.fstat(self.handle.fileno()).st_size / conversion
+        except UnsupportedOperation as e:
+            print('Handle:', type(self.handle))
+            print('Filename:', type(filename), filename)
+            raise(e)
         avail_mem = virtual_memory().available / conversion
         if file_size <= avail_mem:
             self.store = {}
