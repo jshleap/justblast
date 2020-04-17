@@ -33,6 +33,7 @@ from psutil import virtual_memory
 from tqdm import tqdm
 from io import StringIO, UnsupportedOperation
 from pyfaidx import Fasta
+import tempfile
 
 plt.style.use('ggplot')
 
@@ -67,6 +68,7 @@ class FastX(object):
     n_duplicates: int = 0
     handle = None
     store = None
+    naked = None
 
     def __init__(self, filename: str, trimm: Optional[int] = None,
                  outprefix: str = None, unique: bool = False,
@@ -100,16 +102,19 @@ class FastX(object):
     def tipo(self, filename: str) -> None:
         if filename.count('>') >= 1 or filename.count('@') >= 1:
             self.open = StringIO
+            self.naked = True
             line = filename.strip().split('\n')[0]
         else:
             try:
                 with gzip.open(filename, 'rb') as fi:
                     line = fi.readline().strip().decode('utf-8')
                     self.open = gzip.open
+                    self.naked = False
             except OSError:
                 with open(filename) as fi:
                     line = fi.readline().strip()
                     self.open = open
+                    self.naked = False
         if line.strip().startswith('>'):
             self._tipo = 'a'
         elif line.strip().startswith('@'):
@@ -166,6 +171,8 @@ class FastX(object):
                   file=sys.stderr)
 
     def parse_fastq(self, file_name: str) -> None:
+        if self.naked:
+            file_name = 'direct sequence'
         args = [iter(self.handle)] * 4
         if not os.path.isfile('%s.shelve' % self.outprefix):
             aln = Parallel(n_jobs=self.cpus)(  # , prefer="threads")(
@@ -204,8 +211,15 @@ class FastX(object):
             return name, len(seq), (name, (seq, qual))
 
     def parse_fasta(self, file_name: str) -> None:
+        tf = tempfile.NamedTemporaryFile()
+        if self.naked:
+            tf.seek(0)
+            tf.write(bytes(file_name, 'utf-8'))
+            tf.flush()
+            file_name = tf.name
         self.store = Fasta(file_name)
         self.ids = self.store.keys()
+        tf.close()
         # name, seq = None, ''
         # for line in tqdm(self.handle, desc="Parsing %s" % file_name):
         #     line = line.decode('utf-8').strip() if isinstance(
