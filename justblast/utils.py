@@ -38,7 +38,7 @@ plt.style.use('ggplot')
 
 
 def stdin_run(args: list, inpt: Optional[str], env=None,
-              **kwargs) -> Optional[str, Tuple[bytes, str]]:
+              **kwargs):
     if env is None:
         env = {}
     if inpt is None:
@@ -98,7 +98,7 @@ class FastX(object):
 
     @tipo.setter
     def tipo(self, filename: str) -> None:
-        if filename.startswith('>') or filename.startswith('@'):
+        if filename.count('>') >= 1 or filename.count('@') >= 1:
             self.open = StringIO
             line = filename.strip().split('\n')[0]
         else:
@@ -110,20 +110,15 @@ class FastX(object):
                 with open(filename) as fi:
                     line = fi.readline().strip()
                     self.open = open
-        if line.startswith('>'):
+        if line.strip().startswith('>'):
             self._tipo = 'a'
-        elif line.startswith('@'):
+        elif line.strip().startswith('@'):
             self._tipo = 'q'
         else:
             raise Exception("Not an acceptable file format")
         conversion = 1073741824  # 1024 ** 3
         self.handle = self.open(filename)
-        try:
-            file_size = os.fstat(self.handle.fileno()).st_size / conversion
-        except UnsupportedOperation as e:
-            print('Handle:', type(self.handle))
-            print('Filename:', type(filename), filename)
-            raise(e)
+        file_size = self.handle.seek(0, os.SEEK_END) / conversion
         avail_mem = virtual_memory().available / conversion
         if file_size <= avail_mem:
             self.store = {}
