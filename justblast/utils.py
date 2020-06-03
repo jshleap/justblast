@@ -147,8 +147,10 @@ class FastX(object):
         else:
             self.parse_fastq(self.filename)
 
-    def yield_seq(self, as_fasta: bool = True, done: list = []
-                  ) -> Iterator[str]:
+    def yield_seq(self, as_fasta: bool = True, done: list = None) -> Iterator[
+        str]:
+        if not done:
+            done = []
         to_iter = set(self.ids).difference(done)
         for name in to_iter:
             seq = self.store[name][0] if self.tipo == 'q' else self.store[name]
@@ -220,23 +222,6 @@ class FastX(object):
         self.store = Fasta(file_name)
         self.ids = self.store.keys()
         tf.close()
-        # name, seq = None, ''
-        # for line in tqdm(self.handle, desc="Parsing %s" % file_name):
-        #     line = line.decode('utf-8').strip() if isinstance(
-        #         line, bytes) else line.strip()
-        #     if line.startswith(">"):
-        #         if name:
-        #             seq = seq if self.trimm is None else seq[:self.trimm]
-        #             self.store[name] = (seq, None)
-        #             self.ids = np.append(self.ids, name)
-        #         name = line[1:]
-        #         seq = ''
-        #     else:
-        #         seq += line
-        # if name:
-        #     seq = seq if self.trimm is None else seq[:self.trimm]
-        #     self.store[name] = (seq, '')
-        #     self.ids = np.append(self.ids, name)
 
     def write(self, fasta: bool = True) -> None:
         if fasta:

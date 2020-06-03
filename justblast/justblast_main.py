@@ -31,6 +31,7 @@ cols = 'qseqid sseqid pident evalue qcovs qlen length staxid stitle'
 basta_dir = os.path.expanduser("~/.basta/taxonomy")
 my_env = os.environ
 
+
 class Blast(object):
     """
     Class wrapper for blast
