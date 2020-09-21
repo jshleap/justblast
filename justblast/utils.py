@@ -23,7 +23,7 @@ import sys
 import shelve
 from itertools import zip_longest
 from subprocess import run, PIPE, CalledProcessError
-from typing import Optional, Iterator, Tuple, List
+from typing import Optional, Iterator, Tuple, List, Dict
 from textwrap import wrap
 import dill
 import matplotlib.pyplot as plt
@@ -34,11 +34,14 @@ from tqdm import tqdm
 from io import StringIO, UnsupportedOperation
 from pyfaidx import Fasta
 import tempfile
+from tqdm import tqdm, std
+
 
 plt.style.use('ggplot')
 
 
-def stdin_run(args: list, inpt: Optional[str], env=None,
+def stdin_run(args: list, inpt: Optional[str] = None,
+              env: Optional[Dict] = None, progress_bar: std.tqdm = None,
               **kwargs):
     if env is None:
         env = {}
@@ -52,6 +55,8 @@ def stdin_run(args: list, inpt: Optional[str], env=None,
         exe.check_returncode()
     except CalledProcessError:
         raise Exception(exe.stdout, exe.stderr)
+    if progress_bar is not None:
+        progress_bar.update()
     return exe.stdout
 
 

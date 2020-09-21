@@ -22,8 +22,13 @@ import argparse
 from io import BytesIO
 
 import pandas as pd
-
+from joblib import parallel_backend
 from justblast.utils import *
+from justblast.__version__ import version
+from termcolor import colored
+from dask.distributed import Client, progress
+import dask_mpi
+from multiprocessing import cpu_count
 
 plt.style.use('ggplot')
 
@@ -151,15 +156,18 @@ class Blast(object):
             fasta = FastX(self.query, unique=self.unique, cpus=self.cpus)
             args = ['blastn', '-db', self.db, '-query', '-', '-evalue',
                     str(self.evalue), '-perc_identity', str(self.p_id),
-                    '-outfmt', '6 %s' % self.outfmt_str, '-max_target_seqs',
+                    '-outfmt', f'6 {self.outfmt_str}', '-max_target_seqs',
                     str(self.max_target_seqs)]
-            blasts = Parallel(n_jobs=self.cpus)(
-                delayed(stdin_run)(args, inp, env=my_env) for inp in tqdm(
-                    fasta.yield_seq()))
+            with parallel_backend('dask'), tqdm(
+                    desc="Blasting", total=len(fasta)) as tq:
+                blasts = Parallel()(delayed(stdin_run)(
+                    args=args, inpt=inp, env=my_env, progress_bar=tq)
+                                    for inp in fasta.yield_seq())
+                progress(blasts)
             print(fasta.n_duplicates, 'Duplicates in', self.query,
                   file=sys.stderr)
             blasts = [pd.read_table(BytesIO(x), header=None, names=self.columns
-                                    )for x in blasts]
+                                    ) for x in blasts]
             self.blasts = pd.concat(blasts)
         else:
             self.blasts = pd.read_csv(self.out, sep='\t', header=None,
@@ -185,7 +193,8 @@ class Blast(object):
 def main(db: str, query: str, evalue: int = 10, p_id: float = 0,
          max_targets: int = 500, cpus: int = -1, qcovs: Optional[float] = None,
          identify: bool = False, outfile: str = 'hit.hits', outfmt: str = cols,
-         unique: bool = False) -> None:
+         unique: bool = False, scheduler_file: str = None) -> None:
+    #client = Client(scheduler_file=scheduler_file)
     blast = Blast(db=db, query=query, evalue=evalue, p_id=p_id,
                   max_target_seqs=max_targets, cpus=cpus, query_coverage=qcovs,
                   identify=identify, out=outfile, outfmt_str=outfmt)
@@ -205,7 +214,7 @@ if __name__ == '__main__':
                         help='Number of aligned sequences to keep')
     parser.add_argument('-q', '--query_coverage', default=None, type=float,
                         help='Minimum query coverage to retain')
-    parser.add_argument('-c', '--cpus', default=-1, type=int,
+    parser.add_argument('-c', '--cpus', default=cpu_count(), type=int,
                         help='Number of cpus to use')
     parser.add_argument('-i', '--identify', default=False, action='store_true',
                         help='Whether to use basta to assign taxopnomy to the '
@@ -217,8 +226,23 @@ if __name__ == '__main__':
                         help='Custom format for BLAST')
     parser.add_argument('-u', '--unique', default=False, action='store_true',
                         help='Process only unique sequences')
+    parser.add_argument('-v', '--version', action='version',
+                        version='%(prog)s {}'.format(version))
+
+    print('\njustblast version:', colored(version, None, attrs=["bold", "blink"]))
+    print(colored('Copyright 2019', 'red', attrs=["bold"]), 'Jose Sergio Hleap\n')
 
     args = parser.parse_args()
+    try:
+        size = os.environ["OMPI_COMM_WORLD_SIZE"]
+        print(f'Detecting MPI world... Initializing {size} workers')
+        dask_mpi.initialize()
+        client = Client()
+    except KeyError:
+        print(f'Creating a local cluster with {args.cpus} cpus')
+        client = Client(n_workers=args.cpus, threads_per_worker=1,
+                        processes=False)
+    print(client)
     main(db=args.db, query=args.query, evalue=args.evalue,
          p_id=args.percent_id, max_targets=args.max_target_seqs,
          cpus=args.cpus, qcovs=args.query_coverage, identify=args.identify,

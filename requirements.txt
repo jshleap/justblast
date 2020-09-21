@@ -1,5 +1,5 @@
-dill
-psutil
+dill>=0.3.1.1
+psutil>=5.7.0
 cycler>=0.10.0
 joblib>=0.14.0
 kiwisolver>=1.1.0
@@ -14,4 +14,7 @@ six>=1.13.0
 tqdm>=4.38.0
 pyfaidx>=0.5.8
 termcolor>=1.1.0
-#mpi4py
+dask_mpi>=2.0.0
+setuptools>=47.1.1
+numba>=0.49.1
+dask>=2.17.0
