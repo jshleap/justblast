@@ -26,7 +26,7 @@ from joblib import parallel_backend
 from justblast.utils import *
 from justblast.__version__ import version
 from termcolor import colored
-from dask.distributed import Client, progress
+from dask.distributed import Client
 import dask_mpi
 from multiprocessing import cpu_count
 
@@ -163,7 +163,6 @@ class Blast(object):
                 blasts = Parallel()(delayed(stdin_run)(
                     args=args, inpt=inp, env=my_env, progress_bar=tq)
                                     for inp in fasta.yield_seq())
-                progress(blasts)
             print(fasta.n_duplicates, 'Duplicates in', self.query,
                   file=sys.stderr)
             blasts = [pd.read_table(BytesIO(x), header=None, names=self.columns

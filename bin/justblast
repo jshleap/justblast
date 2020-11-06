@@ -2,6 +2,7 @@
 
 from justblast.justblast_main import *
 from justblast.__version__ import version
+import dask_mpi
 
 if __name__ == '__main__':
     form = argparse.ArgumentDefaultsHelpFormatter
