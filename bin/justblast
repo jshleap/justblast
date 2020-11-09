@@ -37,11 +37,21 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     try:
-        size = os.environ["OMPI_COMM_WORLD_SIZE"]
-        print(f'Detecting MPI world... Initializing {size} workers')
+        try:
+            size = os.environ["OMPI_COMM_WORLD_SIZE"]
+            print(f'Detecting MPI world... Initializing {size} workers')
+        except KeyError:
+            nodes = int(os.environ["SLURM_NNODES"])
+            assert nodes > 1
+            cpus_per_node = os.environ["SLURM_JOB_CPUS_PER_NODE"]
+            cpus_per_node = int(cpus_per_node[:cpus_per_node.find('(')])
+            size = nodes * cpus_per_node
+            os.environ['OMPI_COMM_WORLD_SIZE'] = str(cpus_per_node)
+            os.environ['OMPI_COMM_WORLD_LOCAL_SIZE'] = str(size)
+            print(f'Detecting SRUN... Initializing {size} workers')
         dask_mpi.initialize()
         client = Client()
-    except KeyError:
+    except (KeyError, AssertionError):
         print(f'Creating a local cluster with {args.cpus} cpus')
         client = Client(n_workers=args.cpus, threads_per_worker=1,
                         processes=False)
