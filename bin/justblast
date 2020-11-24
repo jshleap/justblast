@@ -49,13 +49,14 @@ if __name__ == '__main__':
             os.environ['OMPI_COMM_WORLD_SIZE'] = str(cpus_per_node)
             os.environ['OMPI_COMM_WORLD_LOCAL_SIZE'] = str(size)
             print(f'Detecting SRUN... Initializing {size} workers')
-        dask_mpi.initialize()
+        dask_mpi.initialize(dashboard=False)
         client = Client()
+        print(client)
     except (KeyError, AssertionError):
+        pass
         print(f'Creating a local cluster with {args.cpus} cpus')
         client = Client(n_workers=args.cpus, threads_per_worker=1,
                         processes=False)
-    print(client)
     main(db=args.db, query=args.query, evalue=args.evalue,
          p_id=args.percent_id, max_targets=args.max_target_seqs,
          cpus=args.cpus, qcovs=args.query_coverage, identify=args.identify,

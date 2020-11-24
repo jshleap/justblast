@@ -31,7 +31,7 @@ import numpy as np
 from joblib import Parallel, delayed
 from psutil import virtual_memory
 from tqdm import tqdm
-from io import StringIO, UnsupportedOperation
+from io import StringIO, UnsupportedOperation, TextIOWrapper
 from pyfaidx import Fasta
 import tempfile
 from tqdm import tqdm, std

@@ -27,6 +27,7 @@ from justblast.utils import *
 from justblast.__version__ import version
 from termcolor import colored
 from dask.distributed import Client
+import dask
 import dask_mpi
 from multiprocessing import cpu_count
 
@@ -62,6 +63,17 @@ class Blast(object):
         self.run()
         self.query_coverage = query_coverage
         self.identify = identify
+
+    @property
+    def query(self) -> str:
+        return self.__query
+
+    @query.setter
+    def query(self, query):
+        if query == '-':
+            self.__query = sys.stdin
+        else:
+            self.__query = query
 
     @property
     def query_coverage(self) -> Optional[float]:
@@ -158,11 +170,11 @@ class Blast(object):
                     str(self.evalue), '-perc_identity', str(self.p_id),
                     '-outfmt', f'6 {self.outfmt_str}', '-max_target_seqs',
                     str(self.max_target_seqs)]
-            with parallel_backend('dask'), tqdm(
-                    desc="Blasting", total=len(fasta)) as tq:
-                blasts = Parallel()(delayed(stdin_run)(
-                    args=args, inpt=inp, env=my_env, progress_bar=tq)
-                                    for inp in fasta.yield_seq())
+            with tqdm(desc="Blasting", total=len(fasta)) as tq:
+                blasts = [dask.delayed(stdin_run)(args=args, inpt=inp,
+                                                  env=my_env, progress_bar=tq)
+                          for inp in fasta.yield_seq()]
+                blasts = dask.compute(*blasts)
             print(fasta.n_duplicates, 'Duplicates in', self.query,
                   file=sys.stderr)
             blasts = [pd.read_table(BytesIO(x), header=None, names=self.columns
@@ -192,9 +204,8 @@ class Blast(object):
 def main(db: str, query: str, evalue: int = 10, p_id: float = 0,
          max_targets: int = 500, cpus: int = -1, qcovs: Optional[float] = None,
          identify: bool = False, outfile: str = 'hit.hits', outfmt: str = cols,
-         unique: bool = False, scheduler_file: str = None) -> None:
-    #client = Client(scheduler_file=scheduler_file)
-    blast = Blast(db=db, query=query, evalue=evalue, p_id=p_id,
+         unique:bool = False) -> None:
+    blast = Blast(db=db, query=query, evalue=evalue, p_id=p_id, unique=unique,
                   max_target_seqs=max_targets, cpus=cpus, query_coverage=qcovs,
                   identify=identify, out=outfile, outfmt_str=outfmt)
     blast.write()
